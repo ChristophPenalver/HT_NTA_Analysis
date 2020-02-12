@@ -1,0 +1,42 @@
+function [Temperature] = TempTracker(infile_Ex,inpath_Ex,NoM,TempRow)
+%TEMPTRACKER Summary of this function goes here
+%   Detailed explanation goes here
+filename = [inpath_Ex,infile_Ex];
+delimiter = ',';
+% prompt = 'Enter Temperature row ?';
+% dlg_title = 'FilenameRow';
+% num_lines = 1;
+% defaultans = {'Please enter row'};
+% answer = inputdlg(prompt,dlg_title,num_lines,defaultans);
+% startRow = str2num(cell2mat(answer))-2;   
+% endRow = str2num(cell2mat(answer))-2;
+% answer = 17;
+startRow = TempRow-3;   
+endRow = TempRow-3;
+%% Read columns of data as text:
+formEnd = '%[^\n\r]';
+formDouble = '%q';
+formCheck = '';
+for i = 1:NoM+1
+    formCheck = strcat(formCheck,formDouble);
+end
+formatSpec = strcat(formCheck,formEnd);
+
+%% Open the text file.
+fileID = fopen(filename,'r');
+%% Read columns of data according to the format.
+% This call is based on the structure of the file used to generate this
+% code. If an error occurs for a different file, try regenerating the code
+% from the Import Tool.
+textscan(fileID, '%[^\n\r]', startRow-1, 'WhiteSpace', '', 'ReturnOnError', false);
+dataArray = textscan(fileID, formatSpec, endRow-startRow+1, 'Delimiter', delimiter, 'TextType', 'string', 'ReturnOnError', false, 'EndOfLine', '\r\n');
+%% Close the text file.
+fclose(fileID);
+
+RunInfo = [dataArray{2:end-1}];
+Temperature = [];
+for xx = 1:NoM
+    Temperature = [Temperature,str2num(RunInfo(1,xx))];
+end
+end
+        
