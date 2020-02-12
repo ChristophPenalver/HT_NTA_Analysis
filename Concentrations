@@ -1,0 +1,48 @@
+function [Concentration,MeanConcentration] = Concentrations(infile_Ex,inpath_Ex,NumOfMeas,ConcRow)
+%% Initialize variables.
+filename = [inpath_Ex,infile_Ex];
+delimiter = ',';
+% prompt = 'Enter Concentration row ?';
+% dlg_title = 'ConcentrationRow';
+% num_lines = 1;
+% defaultans = {'Please enter row'};
+% answer = inputdlg(prompt,dlg_title,num_lines,defaultans);
+% startRow = str2num(cell2mat(answer))-6;   
+% endRow = str2num(cell2mat(answer))-6;
+% answer = 44;
+startRow = ConcRow-6;
+endRow = ConcRow-6;
+%% Read columns of data as text:
+formEnd = '%[^\n\r]';
+formDouble = '%f';
+formCheck = '';
+for i = 1:NumOfMeas+3
+    if i == 1
+        formCheck = '%*q';    
+    else
+        formCheck = strcat(formCheck,formDouble);
+    end
+end
+% formatSpec = '%*q%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%[^\n\r]';
+
+formatSpec = strcat(formCheck,formEnd);
+fileID = fopen(filename,'r');
+
+%% Read columns of data according to the format.
+% This call is based on the structure of the file used to generate this
+% code. If an error occurs for a different file, try regenerating the code
+% from the Import Tool.
+textscan(fileID, '%[^\n\r]', startRow-1, 'WhiteSpace', '', 'ReturnOnError', false);
+dataArray = textscan(fileID, formatSpec, endRow-startRow+1, 'Delimiter', delimiter, 'TextType', 'string', 'ReturnOnError', false, 'EndOfLine', '\r\n');
+
+%% Close the text file.
+fclose(fileID);
+
+%% Create output variable
+Concentration = [dataArray{1:end-3}]';
+MeanConcentration = zeros(NumOfMeas,1);
+MeanConcentration(1:NumOfMeas) = mean(Concentration);
+%% Clear temporary variables
+clearvars filename delimiter startRow endRow formatSpec fileID dataArray ans;
+    
+end
