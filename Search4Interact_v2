@@ -1,0 +1,246 @@
+function [Allspecies,OvPer,Events] = Search4Interact_v2(Temperature,Eval,AllFile,IFolder,PartFile,OFolder,outfileNN,highlim,lowlim,maximalval)
+%Search4Interact Improved Particle tracking system?
+%   Mesured Data is analysed by the algorithm. Particles of every Frame are
+%   displayed. The functions searches the neighbour
+%   particles of every observed particles last detected place. This is
+%   getting repeated for every single Frame in the measurement.  
+%   Loads the input Excel File 
+%% TODO: ALLTRACK DATA & PARTICLE DATA || Fusion of all measurement files? 
+% Here the work was designed for 5 measurements, which is not usable for
+% larger data sets
+% Construct a questdlg with five options
+if Eval(1,1) == 1
+    list = {'Alltracks','Particle Data','Both','Already done','None'};
+    [Ex,~] = listdlg('PromptString','Fusion of data?',...
+                               'SelectionMode','single',...
+                               'ListString',list);           
+    if Ex == 1 || Ex == 3
+        [FusedAlltracks] = Alltracks_fusion;
+    end
+
+    if Ex == 2 || Ex == 3
+        [FusedParticleData] = PartDat_fusion;
+    end
+    
+    clearvars list;
+else 
+    Ex = 5;
+end
+%% ALLTRACK DATA & PARTICLE DATA || Evaluation of Alltracks/Particle Data/Both?
+% Construct a questdlg with THREE options
+if Eval(1,2) ==0
+    choice = questdlg('Would you like to import ALLTRACKS / PARTICLEDATA / BOTH ?', ...
+        'Choose data for import:', ...
+        'Alltracks','ParticleData','Both','Both');
+    % Handle response
+    switch choice
+        case 'Alltracks'
+            impd = 1;
+        case 'ParticleData'
+            impd = 2;
+    end
+else
+    impd = 3;
+end
+clearvars choice;
+%% ALLTRACK DATA || Parser ALLTRACKS
+if impd == 1 || impd == 3
+    AlltrackData = csv_Parser_alltr (AllFile,IFolder,Ex); 
+end
+%% PARTICLE DATA || Parser PARTICLE DATA
+if impd == 2 || impd == 3
+    ParticleData = csv_Parser_partDat (PartFile,IFolder,Ex); 
+    % Exclution of the false entries if data not fused 
+    if Ex == 5
+        ParticleData = ParticleData((ParticleData(:,7)==1),1:6);
+    end
+end 
+%% ALLTRACK DATA || Trackcalculator_v2 
+[AllTracks,~] = Trackcalculator_v2(AlltrackData,outfileNN,OFolder,Temperature);
+AlltrackData = AllTracks;
+% Exclution of the false entries if data not fused 
+if Ex == 5
+    AlltrackData = AlltrackData((AlltrackData(:,8)==1),1:7);
+end
+%% PARTICLE DATA || DATAPLOTTER_PARTDAT - Tracklength relevant data
+% Look at particleData to see tracklength related to the Size and
+% Diffusion coefficient of the data sets. 
+if Eval(1,3) == 1
+    if impd == 2 || impd == 3
+        if Ex == 5
+            % not fused data
+            PlotPartDataHT (ParticleData,outfileNN,OFolder);
+        else 
+            % fused data
+            PlotPartDataHT (FusedParticleData,outfileNN,OFolder);
+        end
+    end
+end
+%% ALLTRACK DATA || START EVALUATION
+if impd == 1 || impd == 3
+    %% ALLTRACK DATA || Intensityplotter 
+    if Eval(1,4) == 1 
+        if Ex == 5
+            % none fused data
+            Int_check (AlltrackData,outfileNN,OFolder);
+        else
+            % fused data
+            Int_check (FusedAlltracks,outfileNN,OFolder);
+        end
+    end
+    clearvars choice case inte;
+    %% ALLTRACK DATA || Size and Dt distributions
+    if Eval(1,5) == 1
+        if Ex == 5
+            % none fused data
+            [x_max,x_maxDiff] = PlotAllTrHT (AlltrackData,outfileNN,OFolder);
+        else
+            % fused data
+            [x_max,x_maxDiff] = PlotAllTrHT (FusedAlltracks,outfileNN,OFolder);
+        end
+%         maximalval = round(x_max,2);
+        maximalD = x_maxDiff;
+    end            
+    clearvars prompt dlg_title defaultans answer num_lines choice case ...
+        dtpl smax;   
+    %% ALLTRACK DATA || Exclusion of particles under/over a certain size    
+    if Ex == 5
+        AlltrackData = AlltrackData((AlltrackData(:,2)>lowlim)&(AlltrackData(:,2)<highlim),:);
+    else 
+        FusedAlltracks = FusedAlltracks((FusedAlltracks(:,2)>lowlim)&(FusedAlltracks(:,2)<highlim),:);
+    end
+    %% ALLTRACK DATA || Exclusion of species in between pot 1-Mer and pot 2-Mer
+    % Lower limit for exclusion: The biggest size of the potential
+    % monomer, so that everything between the monomer and the dimer is
+    % excluded since those particles can not be assigned. 
+    pothl = ceil(maximalval + 0.1*maximalval); 
+    % Upper Limit for exclusion: The smallest size still assignable to the
+    % dimer.
+    mdq = 0.735; % Omega of 2-Mer to calculate the pot 2-Mer Size
+    potll_mdq = floor(floor(maximalval - 0.1*maximalval)/ mdq);
+    
+    if Ex == 5
+        AlltrackData = AlltrackData((AlltrackData(:,2)<pothl)|(AlltrackData(:,2)>potll_mdq),:);
+    else 
+        FusedAlltracks = FusedAlltracks((FusedAlltracks(:,2)<pothl)|(FusedAlltracks(:,2)>potll_mdq),:);
+    end
+    clearvars prompt dlg_title defaultans answer lowlim highlim num_lines...
+        choice case smax pothl mdq potll_mdq data_ev_pre;
+    %% ALLTRACK DATA || Matrix with every appearing particle in the data set
+    appear_part = AlltrackData(find(diff([(min(AlltrackData(:,1))-1);AlltrackData(:,1)])),:);
+    % How many particles are in the data set?
+    [NumberOfParticles,~] = size(appear_part);
+    %% ALLTRACK DATA || Histogram Plotter 
+    % Call Histplotter to get histograms of every species, the unknown
+    % particle distribution, a size/species histogram and a results file
+    % where the percentage of every species is listed.
+    if Eval(1,6) == 1
+        [Allspecies,OvPer] = PlotHistHT (AlltrackData,appear_part,maximalval,maximalD,outfileNN,...
+            OFolder,NumberOfParticles);
+    end
+    %% ALLTRACK DATA || Seperation   and/or Aggregation evaluation
+    if Eval(1,7) == 1
+        mthd = 3;
+    end
+    %% ALLTRACK DATA || Prealocation of variables for Evaluation
+    tracklength_2 = [];
+    CluID = 1;
+    AggSort = [];
+    AggSpecies = [];
+    AggCluster = [];
+    SepID = 1;
+    SepSort = [];
+    SepSpecies = [];
+    SepCluster = [];
+    var = 0;
+    %% ALLTRACK DATA || Evaluation of data sets
+    % Tracklength of particles - calculcation 
+    w=waitbar(0, 'Evaluating interaction events...'); 
+    tvalue = tic;
+    for particle_idx = 1:max(AlltrackData(:,1))
+        part_member = ismember(particle_idx,AlltrackData(:,1));
+        if part_member >=1
+            num_member = ismember(AlltrackData(:,1),particle_idx);
+            len_ind = AlltrackData(num_member);
+            [tr_le,~] = size (len_ind); 
+            tracklength_2 = [tracklength_2;tr_le];
+        end
+    %% AGGREGATION
+        if mthd == 1 || mthd == 3
+            if part_member >=1
+                data_particle = AlltrackData(AlltrackData(:,1) == particle_idx,:);
+                [HCluster, CluID, HSort, Clusterspecies] = TwoTrackAggr(AlltrackData, data_particle, CluID,appear_part,maximalval);
+                AggSort = [AggSort;HSort];
+                AggSpecies = [AggSpecies;Clusterspecies];
+                AggCluster = [AggCluster;HCluster];
+                var = var+1;
+            end
+        end
+     %% SEPERATION
+        if mthd == 2 || mthd == 3
+            if part_member >=1  
+                data_particle = AlltrackData(AlltrackData(:,1) == particle_idx,:);
+                [HCluster,HSort,Clusterspecies,SepID] = ...
+                    TwoTrackSep(AlltrackData,data_particle,SepID,appear_part,maximalval);
+                SepSort = [SepSort;HSort];
+                SepSpecies = [SepSpecies;Clusterspecies];
+                SepCluster = [SepCluster;HCluster];
+            end
+        end
+%     disp([datestr(now) ' - ' ' Evaluated particle: ' num2str(particle_idx) ' of ' num2str(max(AlltrackData(:,1)))]);
+    % Update waitbar
+    waitbar(particle_idx/max(AlltrackData(:,1)));
+    end
+    close (w);
+clearvars CluID Ex SepID status_alltr status_alltr definit idx init ...
+    s_init new_line fir_line choice case Hist choice case s is isit iscomit...
+    scc ssc var len_ind esttime doubletest;
+end
+%% DATA OUTPUT AND EXPORT|| Aggregation and Separation
+%[EventConnectSepAgg,EventConnectAggSep] = Find2Events(AggCluster,SepCluster,AggSort,SepSort,AlltrackData);
+[szAg,~] = size(AggCluster);
+[szSe,~] = size(SepCluster);
+if szAg >0
+    AggrEve = max(AggCluster(:,1));
+else
+    AggrEve = 0;
+end
+if szSe > 0
+    SepEve = max(SepCluster(:,1));
+else
+    SepEve = 0;
+end
+Events = [AggrEve,SepEve,NumberOfParticles];
+foldname = strcat(OFolder,outfileNN,'_Events');
+fileID = fopen([foldname '.txt'],'w');
+fprintf(fileID,'%6s \r\n','Events: Aggregation, Seperation, Number of Particles:');
+fprintf(fileID,'%8s \r\n',num2str(Events)');
+fclose(fileID);
+
+% AGGREGATION
+if mthd == 1 || mthd == 3
+    if szAg > 0
+        Aggregation = [array2table(AggCluster),cell2table(AggSort),...
+            cell2table(AggSpecies)];
+        headers = {'ClusterID' 'ParticleID' 'Size' 'D' 'Relevant_Frame'...
+            'X_Pixel' 'Y_Pixel' 'Intensity' 'Sort' 'Species'};
+        Aggregation.Properties.VariableNames = headers;
+        output = strcat (OFolder,outfileNN,'_Aggregation','.xlsx');
+        writetable(Aggregation,output);
+    end
+end
+% SEPERATION
+if mthd == 2 || mthd == 3 
+    if szSe > 0
+        Separation = [array2table(SepCluster),cell2table(SepSort),...
+            cell2table(SepSpecies)];
+        headers = {'ClusterID' 'ParticleID' 'Size' 'D' 'Relevant_Frame'...
+            'X_Pixel' 'Y_Pixel' 'Intensity'  'Sort' 'Species'};
+        Separation.Properties.VariableNames = headers;
+        output = strcat (OFolder,outfileNN,'_Seperation','.xlsx'); 
+        writetable(Separation,output);
+    end
+end
+
+msgbox('Operation Completed','Success');
+end
