@@ -1,0 +1,136 @@
+function [MeasurementTimes,Conc,MeanConc,Temperature] = PlotExSumHT(dname,folder,NoM,IPath,IFile)
+%Imports and evaluates the ExperimentSummary data of the PTM and gives
+%figures of the results of the measurements of the data. This are two plots
+%one with each mesauement in it and one with the average measurement and
+%the error which is definded by the subtraction and addition of each of the
+%measured data.
+%% Import relevant data from ExperimantSummery.csv
+% Definition of import folder
+% [infile_Ex,inpath_Ex] = uigetfile ({'*.csv', 'CSV Files (*.csv)';...
+%     '*.*', 'ALL Files(*.*)'},'Import an EXPERIMENTSUMMERY.CSV file',...
+%     'MultiSelect', 'off');
+
+% Generate List where you can choose how many measurements were taken
+% in the experiment:    
+% Measurements = 50; % Max number of measurements 
+% dropdown = (1:Measurements)';
+% list = num2str(dropdown);
+% [Ex,~] = listdlg('PromptString','How many measurements were made?',...
+%                        'SelectionMode','single',...
+%                        'ListString',list);
+% NoM = Ex;
+prompt = {'Filename Row?',...
+    'Temperature Row?',...
+    'Concenrtation Row?'...
+    'Bin Center Row?'};
+dlgtitle = 'User input';
+definput = {'14','17','44','77'};
+opts.Interpreter = 'tex';
+answer = inputdlg(prompt,dlgtitle,[1 75],definput,opts);
+FilenameRow = str2double(answer{1,1});
+TempRow = str2double(answer{2,1});
+ConcRow = str2double(answer{3,1});
+BinCenterRow = str2double(answer{4,1});
+
+
+%% Data import via csv_Parser_Ex.m 
+[data_Ex,Runs] = csv_Parser_Ex(IFile,IPath,NoM,BinCenterRow);
+%% Timestamps of the single measurements:
+[MeasurementTimes] = Timestamps(IFile,IPath,NoM,FilenameRow);
+%% Temperature of single measurements:
+[Temperature] = TempTracker(IFile,IPath,NoM,TempRow);
+%% Concentraions during the measurement l
+[Conc,MeanConc] = Concentrations(IFile,IPath,NoM,ConcRow);
+ConcVsTime = array2table([MeasurementTimes,Conc,MeanConc]);
+headers = {'Time' 'Concentration' 'MeanConcentration'};
+ConcVsTime.Properties.VariableNames = headers;
+FigA = figure('visible','off','Color',[1 1 1]);
+plot (MeasurementTimes,Conc,'-bs','LineWidth',1.5,'MarkerFaceColor','b');
+hold on 
+plot(MeasurementTimes,MeanConc,'-r','LineWidth',2);
+
+figdes = '_Concentration';
+xlabel ('Time [s]','Fontsize' ,12 , 'FontName', 'Helvetica')
+ylabel ('Concentration [particles/ml]','Fontsize' ,12 , 'FontName', 'Helvetica')
+legend ('Concentration of Run','Averrage Concentration','Box','off','Location','best');
+legend boxoff
+foldname = strcat(folder,dname,figdes);
+export_fig(foldname,FigA,'-pdf','-tiff','-r300','-painters')
+writetable(ConcVsTime,foldname);
+%% For n measurements
+% Searching for highest measured size in all measurements
+% To adjust Axis in the plot (cutting unnecessary data)
+values = table2array(data_Ex(:,2:(NoM+1)));
+[sz,~] = size (values);
+for rv = 50:sz
+    v1 = values(rv,1);
+    v2 = values(rv,2);
+    if v1==v2 
+        if v1 ==0 && rv >150
+            lr = rv;
+            break
+        end
+    else
+        lr = rv;
+    end
+end
+max_val = lr;
+%% Plotting the data in line plots
+x = data_Ex.Diameter;
+yRuns = zeros(1000,NoM);
+for i = 1:NoM
+    yRuns(:,i) = table2array(data_Ex(:,i+1)); 
+end
+%-------------------------------------------------------------------------%
+h(1) = figure ('visible','off','Color',[1 1 1]);
+plot (x,yRuns)
+hold on
+xlabel ('Diameter [nm]','Fontsize' ,12 , 'FontName', 'Helvetica')
+ylabel ('Concentration [particles/ml]','Fontsize' ,12 , 'FontName', 'Helvetica')
+set (gca ,'LineWidth' ,1) 
+% legend (Runs,'Box','off','Location','best');
+% legend boxoff
+hold off
+
+figdes = '_ExpRes';
+foldname = strcat(folder,dname,figdes);
+export_fig(foldname,h,'-pdf','-tiff','-r300','-painters')
+close (h) 
+NTAData = array2table([x,yRuns]);
+headers = {'Size'};
+for xx = 1:length(Runs)
+    headers = [headers;cell2mat(Runs(1,xx))];
+end
+NTAData.Properties.VariableNames = headers';
+writetable(NTAData,foldname);
+%-------------------------------------------------------------------------%
+g(1) = figure('visible','off','Color',[1 1 1]);
+%     plot (x,yA,x,ysEplus,'--r',x,ysEminus,':r')
+plot (x,data_Ex.ConcentrationAverage)
+hold on 
+xError = x(1:4:end);
+yError = data_Ex.ConcentrationAverage(1:4:end);
+yErrorBar = data_Ex.StandardError(1:4:end);
+e = errorbar(xError,yError,yErrorBar);
+e.Color = 'red';
+e.CapSize = 10;
+hold on
+% axis([0 max(x) 0 inf])
+
+xlabel ('Diameter [nm]','Fontsize' ,12 , 'FontName', 'Helvetica')
+ylabel ('Concentration [particles/ml]','Fontsize' ,12 , 'FontName', 'Helvetica')
+set (gca ,'LineWidth' ,1) 
+%     legend ('Average','Upper Error','Lower Error','Box','off','Location','best');
+legend ('Average','Standard Deviation','Box','off','Location','best');
+legend boxoff
+hold off
+
+figdesav = '_ExpAvRes';
+foldname_av = strcat(folder,dname,figdesav);
+export_fig(foldname_av,g,'-pdf','-tiff','-r300','-painters')
+close (g)
+AvResults = array2table([xError,yError,yErrorBar]);
+headers = {'Size' 'AverageConcentration' 'StandardDeviation'};
+AvResults.Properties.VariableNames = headers;
+writetable(AvResults,foldname_av);
+end
