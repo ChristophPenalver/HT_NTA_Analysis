@@ -1,0 +1,90 @@
+%% High Throughput analysis of NTA data 
+% Using the Script it is possible to analyse a whole data set of any number
+% of NTA experiments. NTA Particle tracking data
+% has to be saved in one folder. The data name of the single measurements
+% need to fit to the ones defined bellow. Also the data is tailored to use
+% NTA data given by the NTA 3.2 software export options. 
+clc, clear  
+% Number of Measurements which need to be analyzed and output name?
+prompt = {'How many measurements need to be analysed?',...
+    'How should the data be called?',...
+    'What is the mode size of a single particle[nm]?'};
+dlgtitle = 'User input';
+definput = {'25','any name','Please enter diameter in nanometer'};
+opts.Interpreter = 'tex';
+answer = inputdlg(prompt,dlgtitle,[1 75],definput,opts);
+NoM = str2double(answer{1,1});
+output = answer{2,1}; 
+maximalval = str2double(answer{3,1});
+
+% Where are the measurement files?
+setInPath = uigetdir('C:\Users\Christoph\Documents\Promotion\LM-10\Messungen','Choose IMPORT FOLDER');
+filesAllT = dir(fullfile(setInPath, '*AllTracks.csv'));
+filesPaDa = dir(fullfile(setInPath, '*ParticleData.csv'));
+filesExSum = dir(fullfile(setInPath, '*ExperimentSummary.csv'));
+IFolder = [filesAllT(1).folder '\'];
+% Where shall the evaluated data be saved?
+setOutPath = uigetdir('C:\Users\Christoph\Documents\MATLAB\ParticleTracker\Exportdata','Choose EXPORT FOLDER');
+
+% What should be analysed?
+% list = {'Data Fusion','Import Alltracks and ParticleData','Tracklength Data',...
+%     'Intensity Data','Size & Dt Distributions','Histograms','Interactions'};
+% [indx,~] = listdlg('PromptString',{'Select what evaluations have to be done.',...
+%     'Multiple selections possible.',''},...
+%     'ListString',list);
+% Eval = ismember(1:length(list),indx);
+Eval = logical([0 1 0 0 1 1 1]);
+
+% What type of data willbe analysed?
+% choice = questdlg('Choose data type','Is this a interaction dataset?', ...
+% 'It is a Monomer Sample(exclude unnecessary data)','A ggregation dataset','Aggregation dataset');
+% % Handle response
+% switch choice
+% case 'It is a Monomer Sample(exclude unnecessary data)' 
+%     fil = 1;    
+% case 'Aggregation dataset'
+%     fil = 0;
+% end
+fil = 0;
+
+% Exclusion of unusable data 
+if fil == 0 
+    lowlim = maximalval - (maximalval* 0.101);
+    highlim =  2.1 * maximalval; 
+elseif fil == 1
+    lowlim = maximalval - (maximalval* 0.101);
+    highlim =  1.2 * maximalval;
+end
+
+% Script for analysis:
+OverallPerc = zeros(NoM,5);
+OverallEvents = zeros(NoM,3);
+for NN =1:NoM
+    OFolder = [setOutPath '\M' num2str(NN)];
+    mkdir (OFolder)
+    OFolder = [OFolder '\'];
+    AllFile = filesAllT(NN).name;
+    PartFile = filesPaDa(NN).name;
+    if NN == 1 % For the first measurement some data has to be generated:
+        ExSumFile = filesExSum.name;
+        [MeasurementTimes,Conc,MeanConc,Temperature] = PlotExSumHT(output,OFolder,NoM,IFolder,ExSumFile);
+    end
+%     Temperature = [23,23.1,23.1,23.1];
+    outputNN = [output '-' num2str(NN)];
+    [Allspecies,OvPer,Events] =  Search4Interact_v2(Temperature(NN),Eval,AllFile,IFolder,PartFile,OFolder,outputNN,highlim,lowlim,maximalval);
+    OverallPerc(NN,:) = OvPer;
+    OverallEvents (NN,:) = Events;
+    disp([datestr(now) '-' ' Evaluated measurement: ' num2str(NN) ' of ' num2str(NoM)]);
+end
+foldname = strcat(setOutPath,'\',output,'_Results');
+Results = array2table(OverallPerc);
+headers = {'Monomer [%]' 'Dimer [%]' 'Trimer [%]' 'Tetramer [%]' 'Unknown [%]'};
+Results.Properties.VariableNames = headers;
+writetable(Results,foldname);
+
+foldname = strcat(setOutPath,'\',output,'_Events');
+Events = array2table(OverallEvents);
+headers = {'Aggregation [counts]' 'Separation [counts]' 'Number of particles [counts]'};
+Events.Properties.VariableNames = headers;
+writetable(Events,foldname);
+
