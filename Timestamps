@@ -1,0 +1,66 @@
+function [MeasurementTimes] = Timestamps(infile_Ex,inpath_Ex,NumOfMeas,FilenameRow)
+%% Initialize variables.
+filename = [inpath_Ex,infile_Ex];
+delimiter = ',';
+% prompt = 'Enter Filename row ?';
+% dlg_title = 'FilenameRow';
+% num_lines = 1;
+% defaultans = {'Please enter row'};
+% answer = inputdlg(prompt,dlg_title,num_lines,defaultans);
+% startRow = str2num(cell2mat(answer))-2;   
+% endRow = str2num(cell2mat(answer))-2;
+% answer = 14;
+startRow = FilenameRow-2; 
+endRow = FilenameRow-2;
+%% Read columns of data as text:
+formEnd = '%[^\n\r]';
+formDouble = '%q';
+formCheck = '';
+for i = 1:NumOfMeas+3
+    formCheck = strcat(formCheck,formDouble);
+end
+formatSpec = strcat(formCheck,formEnd);
+%% Open the text file.
+fileID = fopen(filename,'r');
+%% Read columns of data according to the format.
+% This call is based on the structure of the file used to generate this
+% code. If an error occurs for a different file, try regenerating the code
+% from the Import Tool.
+textscan(fileID, '%[^\n\r]', startRow-1, 'WhiteSpace', '', 'ReturnOnError', false);
+dataArray = textscan(fileID, formatSpec, endRow-startRow+1, 'Delimiter', delimiter, 'TextType', 'string', 'ReturnOnError', false, 'EndOfLine', '\r\n');
+%% Close the text file.
+fclose(fileID);
+
+%% Create output variable
+RunInfo = [dataArray{1:end-1}];
+
+%% Clear temporary variables
+clearvars filename delimiter startRow endRow formatSpec fileID dataArray ans;
+
+prompt = 'After how many seconds was the measurement started ?';
+dlg_title = 'Enter Starting Time in Seconds';
+num_lines = 1;
+defaultans = {'Please enter starting time'};
+answer = inputdlg(prompt,dlg_title,num_lines,defaultans);
+StartingMeas = str2num(cell2mat(answer));    
+    
+RunInfo = RunInfo(:,2:end-2);
+[~,Sizetest]=size(RunInfo);
+AllDates = [];
+for xx = 1:Sizetest
+    Run = char(RunInfo(1,xx));
+    LengthRun = strlength(char(RunInfo(1,xx)));
+    RunDate = Run(LengthRun-18:end);
+    Date=datetime(RunDate,'InputFormat','yyyy-MM-dd HH-mm-ss');
+    AllDates = [AllDates;Date];
+end
+Difference = diff(AllDates);
+[Y, M, D, H, MN, S] = datevec(Difference);
+Seconds = H.*3600+MN.*60+S;
+Seconds = [StartingMeas;Seconds];
+MeasurementTimes = zeros(Sizetest,1);
+for yy = 1:Sizetest
+    MeasurementTimes(yy) = sum(Seconds(1:yy));
+end
+
+end
